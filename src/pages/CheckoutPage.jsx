@@ -114,20 +114,23 @@ export default function CheckoutPage() {
     const handleCheckout = async (e) => {
         e.preventDefault()
 
-        // Guard against double submission using ref (persists across renders)
+        // Guard against double submission - set ref IMMEDIATELY before any checks
         if (submittingRef.current || processing) {
             console.log('Checkout already in progress, ignoring duplicate submission')
             return
         }
 
-        if (!email) {
-            setCheckoutError('Please enter your email address.')
-            return
-        }
-
+        // Set submitting flag FIRST to block any concurrent clicks
         submittingRef.current = true
         setProcessing(true)
         setCheckoutError('')
+
+        if (!email) {
+            setCheckoutError('Please enter your email address.')
+            submittingRef.current = false
+            setProcessing(false)
+            return
+        }
 
         try {
             const items = tickets.map(t => ({
@@ -301,7 +304,7 @@ export default function CheckoutPage() {
                         <div className="pt-3">
                             <button
                                 type="submit"
-                                disabled={processing}
+                                disabled={processing || submittingRef.current}
                                 className="checkout-pay-btn relative"
                             >
                                 {processing ? (
