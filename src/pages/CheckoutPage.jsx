@@ -82,7 +82,6 @@ export default function CheckoutPage() {
     const [checkoutError, setCheckoutError] = useState('')
     const [processing, setProcessing] = useState(false)
     const submittingRef = useRef(false)  // Additional guard against double submission
-    const lastSubmitTimeRef = useRef(0)  // Timestamp of last submission to prevent rapid clicks
 
     useEffect(() => {
         if (!eventId || Object.keys(selectedTickets).length === 0) {
@@ -99,11 +98,27 @@ export default function CheckoutPage() {
                 setEvent(data)
                 const selected = Object.keys(selectedTickets).map(id => {
                     const t = (data.ticket_types || []).find(x => x.id === id)
-                    return t ? { ...t, quantity: selectedTickets[id] } : null
+                    if (!t) return null
+                    
+                    const capacity = t.quantity || 0
+                    const sold = t.quantity_sold || 0
+                    const available = t.quantity_available != null 
+                        ? t.quantity_available 
+                        : Math.max(0, capacity - sold)
+                        
+                    let requestedQty = selectedTickets[id]
+                    if (requestedQty > 10) requestedQty = 10
+                    if (capacity > 0 && requestedQty > available) {
+                        requestedQty = available
+                    }
+                    
+                    if (requestedQty <= 0) return null
+                    
+                    return { ...t, quantity: requestedQty }
                 }).filter(Boolean)
 
                 if (selected.length === 0) {
-                    setCheckoutError('Selected tickets not found. They may have been removed.')
+                    setCheckoutError('Selected tickets are sold out or unavailable.')
                 } else {
                     setTickets(selected)
                 }
@@ -115,28 +130,20 @@ export default function CheckoutPage() {
     const handleCheckout = async (e) => {
         e.preventDefault()
 
-        // Multiple guards against double submission
-        const now = Date.now()
-        const timeSinceLastSubmit = now - lastSubmitTimeRef.current
-
-        // Prevent submissions within 2 seconds of each other
-        if (submittingRef.current || processing || timeSinceLastSubmit < 2000) {
-            console.log('Checkout already in progress or too soon since last attempt, ignoring duplicate submission')
+        // Guard against double submission using ref (persists across renders)
+        if (submittingRef.current || processing) {
+            console.log('Checkout already in progress, ignoring duplicate submission')
             return
         }
-
-        // Set all guards IMMEDIATELY to block concurrent clicks
-        submittingRef.current = true
-        lastSubmitTimeRef.current = now
-        setProcessing(true)
-        setCheckoutError('')
 
         if (!email) {
             setCheckoutError('Please enter your email address.')
-            submittingRef.current = false
-            setProcessing(false)
             return
         }
+
+        submittingRef.current = true
+        setProcessing(true)
+        setCheckoutError('')
 
         try {
             const items = tickets.map(t => ({
@@ -310,12 +317,8 @@ export default function CheckoutPage() {
                         <div className="pt-3">
                             <button
                                 type="submit"
-                                disabled={processing || submittingRef.current}
+                                disabled={processing}
                                 className="checkout-pay-btn relative"
-                                style={{
-                                    pointerEvents: (processing || submittingRef.current) ? 'none' : 'auto',
-                                    opacity: (processing || submittingRef.current) ? 0.6 : 1
-                                }}
                             >
                                 {processing ? (
                                     <>
