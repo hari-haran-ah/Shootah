@@ -82,6 +82,7 @@ export default function CheckoutPage() {
     const [checkoutError, setCheckoutError] = useState('')
     const [processing, setProcessing] = useState(false)
     const submittingRef = useRef(false)  // Additional guard against double submission
+    const lastSubmitTimeRef = useRef(0)  // Timestamp of last submission to prevent rapid clicks
 
     useEffect(() => {
         if (!eventId || Object.keys(selectedTickets).length === 0) {
@@ -114,14 +115,19 @@ export default function CheckoutPage() {
     const handleCheckout = async (e) => {
         e.preventDefault()
 
-        // Guard against double submission - set ref IMMEDIATELY before any checks
-        if (submittingRef.current || processing) {
-            console.log('Checkout already in progress, ignoring duplicate submission')
+        // Multiple guards against double submission
+        const now = Date.now()
+        const timeSinceLastSubmit = now - lastSubmitTimeRef.current
+
+        // Prevent submissions within 2 seconds of each other
+        if (submittingRef.current || processing || timeSinceLastSubmit < 2000) {
+            console.log('Checkout already in progress or too soon since last attempt, ignoring duplicate submission')
             return
         }
 
-        // Set submitting flag FIRST to block any concurrent clicks
+        // Set all guards IMMEDIATELY to block concurrent clicks
         submittingRef.current = true
+        lastSubmitTimeRef.current = now
         setProcessing(true)
         setCheckoutError('')
 
@@ -306,6 +312,10 @@ export default function CheckoutPage() {
                                 type="submit"
                                 disabled={processing || submittingRef.current}
                                 className="checkout-pay-btn relative"
+                                style={{
+                                    pointerEvents: (processing || submittingRef.current) ? 'none' : 'auto',
+                                    opacity: (processing || submittingRef.current) ? 0.6 : 1
+                                }}
                             >
                                 {processing ? (
                                     <>
